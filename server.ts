@@ -9,6 +9,7 @@ interface EVTObject {
   eid: string;
   slug?: string;
   title: string;
+  description?: string;
   organizer: string;
   roomUrl: string;
   scheduledTime: string;
@@ -16,13 +17,15 @@ interface EVTObject {
   recurrence: string;
   origin: string;
   version: number;
+  participantCount: number;
+  bridgeStatus: 'optimal' | 'degraded' | 're-routing';
 }
 
-type FrameType = 'snapshot.sync' | 'delta.sync';
+type FrameType = 'snapshot.sync' | 'delta.sync' | 'heartbeat.sync';
 
 interface ETPFrame {
   type: FrameType;
-  data: Partial<EVTObject>;
+  data: Partial<EVTObject> | null;
   version: number;
   authoritative: boolean;
   timestamp: string;
@@ -35,29 +38,31 @@ const slugToEid = new Map<string, string>();
 const subscribers = new Map<string, Set<express.Response>>();
 
 // Helper to create a meeting
-function createMeeting(title: string, organizer: string, slug: string): EVTObject {
+function createMeeting(title: string, organizer: string, slug: string, description?: string): EVTObject {
   const eid = `evt_${ulid().toLowerCase()}`;
   const meeting: EVTObject = {
     eid,
     slug,
     title,
+    description: description || "Canonical meeting event state synchronized via ETP.",
     organizer,
-    roomUrl: `https://meet.jit.si/cmameet-${slug}-${ulid().toLowerCase().slice(0, 8)}`,
+    roomUrl: `https://meet.jit.si/cmameet-${slug || ulid().toLowerCase().slice(0, 8)}`,
     scheduledTime: new Date(Date.now() + 3600000).toISOString(),
     lifecycle: 'scheduled',
-    recurrence: 'weekly',
-    origin: 'cmameet-authoritative',
-    version: 1
+    recurrence: 'once',
+    origin: 'cmameet-authoritative-node-01',
+    version: 1,
+    participantCount: 0,
+    bridgeStatus: 'optimal'
   };
   meetings.set(eid, meeting);
-  slugToEid.set(slug, eid);
+  if (slug) slugToEid.set(slug, eid);
   return meeting;
 }
 
 // Initial Data
-createMeeting("Team Daily Sync", "Alice", "team-sync");
-createMeeting("Crystal Meth Anonymous - Friday Night", "CMA Group", "friday-night");
-createMeeting("Design Workshop", "Bob", "design-workshop");
+createMeeting("Community Check-in", "CMA Network", "community-call");
+createMeeting("Authoritative ETP Workshop", "Protocol Foundation", "etp-workshop");
 
 // --- SSE Broadcast ---
 
@@ -68,6 +73,20 @@ function broadcast(eid: string, frame: ETPFrame) {
     clients.forEach(res => res.write(message));
   }
 }
+
+// Heartbeat Loop
+setInterval(() => {
+  meetings.forEach((meeting, eid) => {
+    const frame: ETPFrame = {
+      type: 'heartbeat.sync',
+      data: null,
+      version: meeting.version,
+      authoritative: true,
+      timestamp: new Date().toISOString()
+    };
+    broadcast(eid, frame);
+  });
+}, 15000);
 
 // --- App ---
 
@@ -80,14 +99,27 @@ async function startServer() {
   // Resolver: Slug to EID
   app.get("/api/e/resolve/:slug", (req, res) => {
     const eid = slugToEid.get(req.params.slug);
-    if (!eid) return res.status(404).json({ error: "Event not found" });
+    if (!eid) return res.status(404).json({ error: "Event identity not found" });
     res.json({ eid });
+  });
+
+  // Create Meeting
+  app.post("/api/meetings", (req, res) => {
+    const { title, organizer, slug, description } = req.body;
+    if (!title || !organizer) return res.status(400).json({ error: "Missing identity params" });
+    
+    if (slug && slugToEid.has(slug)) {
+      return res.status(400).json({ error: "Slug collision detected" });
+    }
+
+    const meeting = createMeeting(title, organizer, slug, description);
+    res.status(201).json(meeting);
   });
 
   // Get Event Snapshot
   app.get("/api/e/:eid", (req, res) => {
     const meeting = meetings.get(req.params.eid);
-    if (!meeting) return res.status(404).json({ error: "Event not found" });
+    if (!meeting) return res.status(404).json({ error: "Identity sequence missing" });
     res.json(meeting);
   });
 
@@ -100,7 +132,7 @@ async function startServer() {
   app.patch("/api/e/:eid", (req, res) => {
     const { eid } = req.params;
     const meeting = meetings.get(eid);
-    if (!meeting) return res.status(404).json({ error: "Event not found" });
+    if (!meeting) return res.status(404).json({ error: "Identity sequence missing" });
 
     const updates = req.body;
     meeting.version += 1;
@@ -122,7 +154,7 @@ async function startServer() {
   app.get("/api/e/:eid/stream", (req, res) => {
     const { eid } = req.params;
     const meeting = meetings.get(eid);
-    if (!meeting) return res.status(404).json({ error: "Event not found" });
+    if (!meeting) return res.status(404).json({ error: "Identity sequence missing" });
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -143,8 +175,8 @@ async function startServer() {
     subscribers.get(eid)!.add(res);
 
     req.on('close', () => {
-      subscribers.get(eid)?.delete(res);
-      if (subscribers.get(eid)?.size === 0) subscribers.delete(eid);
+      subscribers.get(eid)!.delete(res);
+      if (subscribers.get(eid)!.size === 0) subscribers.delete(eid);
     });
   });
 
