@@ -5,9 +5,14 @@ export interface EVTObject {
   description?: string;
   organizer: string;
   roomUrl: string;
+  roomName: string;
   scheduledTime: string;
+  duration: number;
+  timezone: string;
   lifecycle: 'scheduled' | 'live' | 'delayed' | 'cancelled';
-  recurrence: string;
+  recurrence: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+  privacy: 'public' | 'private';
+  pin?: string;
   origin: string;
   version: number;
   participantCount: number;

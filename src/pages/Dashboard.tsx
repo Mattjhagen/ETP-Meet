@@ -24,6 +24,12 @@ export default function Dashboard() {
   const [title, setTitle] = useState('');
   const [organizer, setOrganizer] = useState('');
   const [slug, setSlug] = useState('');
+  const [description, setDescription] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [time, setTime] = useState('10:00');
+  const [duration, setDuration] = useState(60);
+  const [recurrence, setRecurrence] = useState<'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('none');
+  const [privacy, setPrivacy] = useState<'public' | 'private'>('public');
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -38,11 +44,25 @@ export default function Dashboard() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
+    
+    const scheduledTime = new Date(`${date}T${time}:00`).toISOString();
+    const pin = privacy === 'private' ? Math.floor(1000 + Math.random() * 9000).toString() : undefined;
+
     try {
       const res = await fetch('/api/meetings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, organizer, slug: slug || undefined }),
+        body: JSON.stringify({ 
+          title, 
+          organizer, 
+          slug: slug || undefined,
+          description,
+          scheduledTime,
+          duration,
+          recurrence,
+          privacy,
+          pin
+        }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -113,17 +133,32 @@ export default function Dashboard() {
                 >
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-10">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-4">
-                        <span className={`text-[9px] font-bold px-3 py-1 rounded-full tracking-widest uppercase ${
-                          meeting.lifecycle === 'live' ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-500 bg-white/5'
+                      <div className="flex flex-wrap items-center gap-3 mb-4">
+                        <span className={`text-[9px] font-black px-3 py-1 rounded-full tracking-widest uppercase border ${
+                          meeting.lifecycle === 'live' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-slate-500/10 border-white/10 text-slate-500'
                         }`}>
                           {meeting.lifecycle}
                         </span>
+                        {meeting.privacy === 'private' && (
+                          <span className="flex items-center gap-1 text-[9px] font-black px-3 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-full tracking-widest uppercase">
+                            <Shield className="w-3 h-3" />
+                            Private
+                          </span>
+                        )}
+                        {meeting.recurrence !== 'none' && (
+                          <span className="text-[9px] font-black px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-full tracking-widest uppercase">
+                            {meeting.recurrence}
+                          </span>
+                        )}
                       </div>
                       <h3 className="text-3xl font-bold mb-4 truncate tracking-tight group-hover:text-indigo-400 transition-colors">
                         {meeting.title}
                       </h3>
                       <div className="flex flex-wrap items-center gap-8 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                        <div className="flex items-center gap-2">
+                           <Calendar className="w-4 h-4 opacity-50" />
+                           <span>{new Date(meeting.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(meeting.scheduledTime).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+                        </div>
                         <div className="flex items-center gap-2">
                           <Users className="w-4 h-4 opacity-50" />
                           <span>{meeting.organizer}</span>
@@ -190,7 +225,7 @@ export default function Dashboard() {
               <h2 className="text-3xl font-black mb-2">Create New Event</h2>
               <p className="text-slate-400 mb-8 font-medium">Broadcast a live event identity to the ETP cluster.</p>
               
-              <form onSubmit={handleCreate} className="space-y-6">
+              <form onSubmit={handleCreate} className="space-y-6 max-h-[70vh] overflow-y-auto pr-2 no-scrollbar">
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Event Title</label>
                   <input 
@@ -201,6 +236,7 @@ export default function Dashboard() {
                     className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 focus:outline-none focus:border-indigo-500 font-bold transition-colors"
                   />
                 </div>
+                
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Organizer</label>
@@ -213,21 +249,92 @@ export default function Dashboard() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">URL Slug (Optional)</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Privacy</label>
+                    <div className="flex gap-2">
+                      <button 
+                        type="button"
+                        onClick={() => setPrivacy('public')}
+                        className={`flex-1 py-4 rounded-2xl border font-bold text-[10px] uppercase tracking-widest transition-all ${privacy === 'public' ? 'bg-white text-slate-950 border-white' : 'bg-white/5 text-slate-500 border-white/10'}`}
+                      >
+                        Public
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setPrivacy('private')}
+                        className={`flex-1 py-4 rounded-2xl border font-bold text-[10px] uppercase tracking-widest transition-all ${privacy === 'private' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white/5 text-slate-500 border-white/10'}`}
+                      >
+                        Private
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Date</label>
                     <input 
-                      value={slug}
-                      onChange={e => setSlug(e.target.value)}
-                      placeholder="custom-slug"
+                      type="date"
+                      value={date}
+                      onChange={e => setDate(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 focus:outline-none focus:border-indigo-500 font-bold transition-colors"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Time</label>
+                    <input 
+                      type="time"
+                      value={time}
+                      onChange={e => setTime(e.target.value)}
                       className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 focus:outline-none focus:border-indigo-500 font-bold transition-colors"
                     />
                   </div>
                 </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Duration (min)</label>
+                    <select 
+                      value={duration}
+                      onChange={e => setDuration(Number(e.target.value))}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 focus:outline-none focus:border-indigo-500 font-bold transition-colors appearance-none"
+                    >
+                      <option value={30}>30 Minutes</option>
+                      <option value={60}>1 Hour</option>
+                      <option value={90}>1.5 Hours</option>
+                      <option value={120}>2 Hours</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Recurrence</label>
+                    <select 
+                      value={recurrence}
+                      onChange={e => setRecurrence(e.target.value as any)}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 focus:outline-none focus:border-indigo-500 font-bold transition-colors appearance-none"
+                    >
+                      <option value="none">Once</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Custom Slug (Optional)</label>
+                  <input 
+                    value={slug}
+                    onChange={e => setSlug(e.target.value)}
+                    placeholder="my-custom-room"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 focus:outline-none focus:border-indigo-500 font-bold transition-colors"
+                  />
+                </div>
+
                 <button 
                   disabled={creating}
-                  className="w-full bg-white text-slate-950 font-black py-5 rounded-[1.5rem] mt-4 hover:bg-indigo-50 transition-all flex items-center justify-center gap-3 active:scale-[0.98] disabled:opacity-50"
+                  className="w-full bg-white text-slate-950 font-black py-6 rounded-[2rem] mt-4 hover:shadow-[0_20px_40px_rgba(255,255,255,0.1)] transition-all flex items-center justify-center gap-3 active:scale-[0.98] disabled:opacity-50 uppercase tracking-widest text-xs"
                 >
-                  {creating ? 'Initializing Identity...' : 'Generate Live EID'}
-                  <Zap className="w-5 h-5 fill-current" />
+                  {creating ? 'Synchronizing Cluster...' : 'Create Scheduled Identity'}
+                  <Zap className="w-5 h-5 fill-current text-indigo-500" />
                 </button>
               </form>
             </motion.div>

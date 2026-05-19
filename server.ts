@@ -14,9 +14,14 @@ interface EVTObject {
   description?: string;
   organizer: string;
   roomUrl: string;
+  roomName: string;
   scheduledTime: string;
+  duration: number; // in minutes
+  timezone: string;
   lifecycle: 'scheduled' | 'live' | 'delayed' | 'cancelled';
-  recurrence: string;
+  recurrence: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+  privacy: 'public' | 'private';
+  pin?: string;
   origin: string;
   version: number;
   participantCount: number;
@@ -42,18 +47,24 @@ const subscribers = new Map<string, Set<express.Response>>();
 const roomParticipants = new Map<string, Set<string>>(); // eid -> set of socket ids
 
 // Helper to create a meeting
-function createMeeting(title: string, organizer: string, slug: string, description?: string): EVTObject {
+function createMeeting(params: Partial<EVTObject>): EVTObject {
   const eid = `evt_${ulid().toLowerCase()}`;
+  const roomName = params.roomName || params.slug || ulid().toLowerCase().slice(0, 8);
   const meeting: EVTObject = {
     eid,
-    slug,
-    title,
-    description: description || "Canonical meeting event state synchronized via ETP.",
-    organizer,
-    roomUrl: `https://meet.jit.si/cmameet-${slug || ulid().toLowerCase().slice(0, 8)}`,
-    scheduledTime: new Date(Date.now() + 3600000).toISOString(),
+    slug: params.slug,
+    title: params.title || "Untitled Meeting",
+    description: params.description || "Canonical meeting event state synchronized via ETP.",
+    organizer: params.organizer || "System",
+    roomName,
+    roomUrl: `https://meet.jit.si/cmameet-${roomName}`,
+    scheduledTime: params.scheduledTime || new Date(Date.now() + 3600000).toISOString(),
+    duration: params.duration || 60,
+    timezone: params.timezone || 'UTC',
     lifecycle: 'scheduled',
-    recurrence: 'once',
+    recurrence: params.recurrence || 'none',
+    privacy: params.privacy || 'public',
+    pin: params.pin,
     origin: 'cmameet-authoritative-node-01',
     version: 1,
     participantCount: 0,
@@ -61,13 +72,13 @@ function createMeeting(title: string, organizer: string, slug: string, descripti
   };
   meetings.set(eid, meeting);
   meetingHistory.set(eid, []);
-  if (slug) slugToEid.set(slug, eid);
+  if (meeting.slug) slugToEid.set(meeting.slug, eid);
   return meeting;
 }
 
 // Initial Data
-createMeeting("Community Check-in", "CMA Network", "community-call");
-createMeeting("Authoritative ETP Workshop", "Protocol Foundation", "etp-workshop");
+createMeeting({ title: "Community Check-in", organizer: "CMA Network", slug: "community-call" });
+createMeeting({ title: "Authoritative ETP Workshop", organizer: "Protocol Foundation", slug: "etp-workshop" });
 
 // --- SSE Broadcast ---
 
@@ -167,14 +178,25 @@ async function startServer() {
 
   // Create Meeting
   app.post("/api/meetings", (req, res) => {
-    const { title, organizer, slug, description } = req.body;
+    const { title, organizer, slug, description, scheduledTime, duration, timezone, recurrence, privacy, pin } = req.body;
     if (!title || !organizer) return res.status(400).json({ error: "Missing identity params" });
     
     if (slug && slugToEid.has(slug)) {
       return res.status(400).json({ error: "Slug collision detected" });
     }
 
-    const meeting = createMeeting(title, organizer, slug, description);
+    const meeting = createMeeting({ 
+      title, 
+      organizer, 
+      slug, 
+      description, 
+      scheduledTime, 
+      duration, 
+      timezone, 
+      recurrence, 
+      privacy, 
+      pin 
+    });
     res.status(201).json(meeting);
   });
 
@@ -197,6 +219,12 @@ async function startServer() {
     if (!meeting) return res.status(404).json({ error: "Identity sequence missing" });
 
     const updates = req.body;
+    
+    // Automatic room rotation if roomName is specified
+    if (updates.roomName && updates.roomName !== meeting.roomName) {
+      updates.roomUrl = `https://meet.jit.si/cmameet-${updates.roomName}`;
+    }
+
     meeting.version += 1;
     Object.assign(meeting, updates);
 
