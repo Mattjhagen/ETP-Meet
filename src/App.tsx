@@ -14,6 +14,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/join/:slug" element={<EventView />} />
+          <Route path="/:slug" element={<EventView />} />
         </Routes>
       </div>
     </Router>

@@ -21,20 +21,31 @@ export function useETP(eid: string | null) {
     const eventSource = new EventSource(`/api/e/${eid}/stream`);
 
     eventSource.onmessage = (event) => {
-      const frame: ETPFrame = JSON.parse(event.data);
-      
-      if (frame.type === 'snapshot.sync') {
-        setEventState(frame.data as EVTObject);
-        setSyncStatus('synced');
-        resetStaleTimer();
-      } else if (frame.type === 'delta.sync') {
-        setEventState(prev => prev ? { ...prev, ...frame.data, version: frame.version } : null);
-        setLastUpdate(frame.timestamp);
-        setSyncStatus('synced');
-        resetStaleTimer();
-      } else if (frame.type === 'heartbeat.sync') {
-        setSyncStatus('synced');
-        resetStaleTimer();
+      try {
+        const frame: ETPFrame = JSON.parse(event.data);
+        
+        if (frame.type === 'snapshot.sync') {
+          setEventState(frame.data as EVTObject);
+          setSyncStatus('synced');
+          resetStaleTimer();
+        } else if (frame.type === 'delta.sync') {
+          setEventState(prev => {
+            if (!prev) return null;
+            // Only update if the incoming version is strictly greater to handle out-of-order SSE delivery
+            if (frame.version > prev.version) {
+              return { ...prev, ...(frame.data || {}), version: frame.version };
+            }
+            return prev;
+          });
+          setLastUpdate(frame.timestamp);
+          setSyncStatus('synced');
+          resetStaleTimer();
+        } else if (frame.type === 'heartbeat.sync') {
+          setSyncStatus('synced');
+          resetStaleTimer();
+        }
+      } catch (err) {
+        console.error("[ETP-CLIENT] Frame processing error:", err);
       }
     };
 
