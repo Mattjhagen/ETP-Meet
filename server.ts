@@ -2,6 +2,8 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { ulid } from "ulid";
+import { createServer } from "http";
+import { Server } from "socket.io";
 
 // --- Types ---
 
@@ -34,8 +36,10 @@ interface ETPFrame {
 // --- Store ---
 
 const meetings = new Map<string, EVTObject>();
+const meetingHistory = new Map<string, ETPFrame[]>();
 const slugToEid = new Map<string, string>();
 const subscribers = new Map<string, Set<express.Response>>();
+const roomParticipants = new Map<string, Set<string>>(); // eid -> set of socket ids
 
 // Helper to create a meeting
 function createMeeting(title: string, organizer: string, slug: string, description?: string): EVTObject {
@@ -56,6 +60,7 @@ function createMeeting(title: string, organizer: string, slug: string, descripti
     bridgeStatus: 'optimal'
   };
   meetings.set(eid, meeting);
+  meetingHistory.set(eid, []);
   if (slug) slugToEid.set(slug, eid);
   return meeting;
 }
@@ -71,6 +76,13 @@ function broadcast(eid: string, frame: ETPFrame) {
   if (clients) {
     const message = `data: ${JSON.stringify(frame)}\n\n`;
     clients.forEach(res => res.write(message));
+  }
+  // Also push to history
+  if (frame.type === 'delta.sync') {
+    const history = meetingHistory.get(eid) || [];
+    history.push(frame);
+    if (history.length > 100) history.shift(); // Keep last 100 deltas
+    meetingHistory.set(eid, history);
   }
 }
 
@@ -92,11 +104,59 @@ setInterval(() => {
 
 async function startServer() {
   const app = express();
-  // Port 3000 is hardcoded for infrastructure compatibility.
-  // Railway and other container platforms will detect the exposed port or use this fallback.
+  const httpServer = createServer(app);
+  const io = new Server(httpServer, {
+    cors: { origin: "*" }
+  });
+
   const PORT = 3000;
 
   app.use(express.json());
+
+  // --- Socket.io Signaling & Presence ---
+  io.on("connection", (socket) => {
+    socket.on("join-room", (eid) => {
+      if (!meetings.has(eid)) return;
+      socket.join(eid);
+      
+      if (!roomParticipants.has(eid)) roomParticipants.set(eid, new Set());
+      roomParticipants.get(eid)!.add(socket.id);
+      
+      const meeting = meetings.get(eid)!;
+      meeting.participantCount = roomParticipants.get(eid)!.size;
+      meeting.version += 1;
+      
+      const frame: ETPFrame = {
+        type: 'delta.sync',
+        data: { participantCount: meeting.participantCount },
+        version: meeting.version,
+        authoritative: true,
+        timestamp: new Date().toISOString()
+      };
+      broadcast(eid, frame);
+    });
+
+    socket.on("disconnect", () => {
+      roomParticipants.forEach((participants, eid) => {
+        if (participants.has(socket.id)) {
+          participants.delete(socket.id);
+          const meeting = meetings.get(eid);
+          if (meeting) {
+            meeting.participantCount = participants.size;
+            meeting.version += 1;
+            const frame: ETPFrame = {
+              type: 'delta.sync',
+              data: { participantCount: meeting.participantCount },
+              version: meeting.version,
+              authoritative: true,
+              timestamp: new Date().toISOString()
+            };
+            broadcast(eid, frame);
+          }
+        }
+      });
+    });
+  });
 
   // Resolver: Slug to EID
   app.get("/api/e/resolve/:slug", (req, res) => {
@@ -163,6 +223,10 @@ async function startServer() {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
+    // Replay history if requested
+    const lastVersion = parseInt(req.query.version as string) || 0;
+    const history = meetingHistory.get(eid) || [];
+    
     // Initial snapshot
     const snapshotFrame: ETPFrame = {
       type: 'snapshot.sync',
@@ -172,6 +236,13 @@ async function startServer() {
       timestamp: new Date().toISOString()
     };
     res.write(`data: ${JSON.stringify(snapshotFrame)}\n\n`);
+
+    // If version is provided, replay deltas after that version
+    if (lastVersion > 0) {
+      history.filter(f => f.version > lastVersion).forEach(f => {
+        res.write(`data: ${JSON.stringify(f)}\n\n`);
+      });
+    }
 
     if (!subscribers.has(eid)) subscribers.set(eid, new Set());
     subscribers.get(eid)!.add(res);
@@ -197,7 +268,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`[ETP-NODE-01] Identity Sync Service online: http://0.0.0.0:${PORT}`);
   });
 }
