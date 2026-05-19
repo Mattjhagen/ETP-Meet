@@ -1,0 +1,6 @@
+{
+  "name": "CMAMeet ETP",
+  "description": "A live-synchronized meeting platform using Event Transport Protocol (ETP) for authoritative meeting state propagation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
