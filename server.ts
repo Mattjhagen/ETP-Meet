@@ -92,6 +92,8 @@ setInterval(() => {
 
 async function startServer() {
   const app = express();
+  // Port 3000 is hardcoded for infrastructure compatibility.
+  // Railway and other container platforms will detect the exposed port or use this fallback.
   const PORT = 3000;
 
   app.use(express.json());
@@ -196,7 +198,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`[ETP-NODE-01] Identity Sync Service online: http://0.0.0.0:${PORT}`);
   });
 }
 
