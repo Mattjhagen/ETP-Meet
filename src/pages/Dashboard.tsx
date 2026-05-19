@@ -69,14 +69,14 @@ export default function Dashboard() {
         <header className="mb-20 flex flex-col md:flex-row md:items-end justify-between gap-12">
           <div className="space-y-6">
             <div className="flex items-center gap-2.5 text-indigo-400 font-bold tracking-[0.25em] text-[10px] uppercase">
-              <Zap className="w-4 h-4 fill-current" />
-              <span>Real-time Event Synchronization</span>
+              <Activity className="w-4 h-4" />
+              <span>Live Meeting Environment</span>
             </div>
             <h1 className="text-6xl md:text-8xl font-black tracking-tighter">
-              CMAMeet<span className="text-indigo-500">_</span>
+              Meet<span className="text-indigo-500">.</span>
             </h1>
             <p className="text-slate-400 text-xl max-w-lg font-medium leading-relaxed">
-              A lightweight environment for live meeting identities. Instant synchronization, zero friction.
+              Simple, synchronized meeting spaces. No friction, just live collaboration.
             </p>
           </div>
           <button 
@@ -84,7 +84,7 @@ export default function Dashboard() {
             className="group flex items-center gap-3 bg-white text-slate-950 px-10 py-5 rounded-2xl font-bold hover:shadow-[0_0_50px_rgba(255,255,255,0.15)] transition-all active:scale-95"
           >
             <Plus className="w-5 h-5 transition-transform group-hover:rotate-90" />
-            <span className="tracking-tight uppercase">Initialize Identity</span>
+            <span className="tracking-tight uppercase">New Meeting</span>
           </button>
         </header>
 
@@ -92,10 +92,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between px-2 mb-10">
             <div className="flex items-center gap-3">
               <Globe className="w-4 h-4 text-indigo-500" />
-              <h2 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Active Identities on Node 01</h2>
-            </div>
-            <div className="flex items-center gap-4 text-xs font-bold text-slate-600">
-              <span className="flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> {meetings.length} Events</span>
+              <h2 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Active Rooms</h2>
             </div>
           </div>
 
@@ -117,10 +114,7 @@ export default function Dashboard() {
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-10">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-4">
-                        <span className="text-[9px] font-mono font-bold bg-white/5 text-slate-500 px-2 py-1 rounded tracking-widest">
-                          {meeting.eid}
-                        </span>
-                        <span className={`text-[9px] font-bold px-2 py-1 rounded tracking-widest uppercase ${
+                        <span className={`text-[9px] font-bold px-3 py-1 rounded-full tracking-widest uppercase ${
                           meeting.lifecycle === 'live' ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-500 bg-white/5'
                         }`}>
                           {meeting.lifecycle}
@@ -134,23 +128,19 @@ export default function Dashboard() {
                           <Users className="w-4 h-4 opacity-50" />
                           <span>{meeting.organizer}</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Activity className="w-4 h-4 opacity-50 text-indigo-500" />
-                          <span>Sequence v{meeting.version}</span>
-                        </div>
                         {meeting.participantCount > 0 && (
                           <div className="flex items-center gap-2 text-emerald-500">
                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                             <span>{meeting.participantCount} in room</span>
+                             <span>{meeting.participantCount} Active</span>
                           </div>
                         )}
                       </div>
                     </div>
                     <Link
                       to={`/join/${meeting.slug || meeting.eid}`}
-                      className="bg-slate-800 hover:bg-indigo-600 text-white px-10 py-5 rounded-2xl font-black text-sm transition-all shadow-xl active:scale-95 shrink-0 uppercase tracking-widest"
+                      className="bg-slate-800 hover:bg-indigo-600 text-white px-10 py-5 rounded-2xl font-black text-xs transition-all shadow-xl active:scale-95 shrink-0 uppercase tracking-widest"
                     >
-                      Join Call
+                      Enter
                     </Link>
                   </div>
                 </motion.div>
@@ -159,18 +149,16 @@ export default function Dashboard() {
           )}
         </section>
 
-        <footer className="mt-40 flex flex-col md:flex-row md:items-center justify-between gap-8 py-10 border-t border-white/5">
+        <footer className="mt-40 flex flex-col md:flex-row md:items-center justify-between gap-8 py-10 border-t border-white/5 opacity-50 hover:opacity-100 transition-opacity">
           <div className="flex items-center gap-8 text-[9px] font-mono tracking-[0.3em] uppercase text-slate-600">
-            <div className="flex items-center gap-2 text-emerald-500/60">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.3)]" />
-              <span>Node CMAMeet.Sync_01 Online</span>
+            <div className="flex items-center gap-2">
+              <span className="w-1.2 h-1.2 rounded-full bg-emerald-500" />
+              <span>Service Online</span>
             </div>
-            <span>Transport: ETP/SSE v1.4</span>
+            <span>v1.4.2</span>
           </div>
           <div className="flex items-center gap-6">
-            <Shield className="w-4 h-4 text-slate-800" />
-            <Zap className="w-4 h-4 text-slate-800" />
-            <Globe className="w-4 h-4 text-slate-800" />
+            <span className="text-[10px] font-bold text-slate-700 uppercase tracking-widest">Minimal • Reliable • Open</span>
           </div>
         </footer>
       </div>
